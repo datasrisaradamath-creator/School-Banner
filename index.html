@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A private, browser-based banner maker for Ramakrishna Sarada Mission Girls' School."
+    />
+    <title>School Banner</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">BS</div>
+          <div>
+            <p class="eyebrow">Personal design tool</p>
+            <h1>School Banner</h1>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <span class="save-status" id="saveStatus" role="status">
+            <span class="save-dot" aria-hidden="true"></span>
+            Saved locally
+          </span>
+          <button class="button button-quiet" id="resetButton" type="button">
+            Reset design
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="editor-card" aria-labelledby="editorTitle">
+          <div class="editor-heading">
+            <div>
+              <p class="eyebrow">Live editor</p>
+              <h2 id="editorTitle">Design your banner</h2>
+            </div>
+            <p class="editor-hint">
+              Click the text on the banner and type directly. Your changes stay on this device.
+            </p>
+          </div>
+
+          <div class="toolbar" role="toolbar" aria-label="Text formatting">
+            <div class="tool-group tool-group-history" aria-label="History">
+              <button class="icon-button" id="undoButton" type="button" title="Undo" aria-label="Undo">
+                <span aria-hidden="true">↶</span>
+              </button>
+              <button class="icon-button" id="redoButton" type="button" title="Redo" aria-label="Redo">
+                <span aria-hidden="true">↷</span>
+              </button>
+            </div>
+
+            <div class="tool-group tool-group-font">
+              <label class="sr-only" for="fontSelect">Font family</label>
+              <select id="fontSelect" class="font-select" aria-label="Font family"></select>
+
+              <label class="range-tool compact-range" for="fontSizeRange">
+                <span>Size</span>
+                <input id="fontSizeRange" type="range" min="24" max="64" step="1" />
+                <output id="fontSizeOutput" for="fontSizeRange">40</output>
+              </label>
+            </div>
+
+            <div class="tool-group" aria-label="Emphasis">
+              <button class="icon-button type-button" id="boldButton" type="button" title="Bold" aria-label="Bold">
+                <strong aria-hidden="true">B</strong>
+              </button>
+              <button class="icon-button type-button" id="italicButton" type="button" title="Italic" aria-label="Italic">
+                <em aria-hidden="true">I</em>
+              </button>
+            </div>
+
+            <div class="tool-group" role="group" aria-label="Text alignment">
+              <button class="icon-button align-button" data-align="left" type="button" title="Align left" aria-label="Align left">
+                <span aria-hidden="true">≡</span>
+              </button>
+              <button class="icon-button align-button" data-align="center" type="button" title="Align center" aria-label="Align center">
+                <span class="align-center-icon" aria-hidden="true">≡</span>
+              </button>
+              <button class="icon-button align-button" data-align="right" type="button" title="Align right" aria-label="Align right">
+                <span class="align-right-icon" aria-hidden="true">≡</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="banner-frame">
+            <div class="banner-topline">
+              <span class="edit-badge"><span aria-hidden="true">✎</span> Editing canvas</span>
+              <span id="overflowMessage" class="overflow-message" role="status" hidden>
+                Text is crowded—reduce the font size or shorten a line.
+              </span>
+            </div>
+
+            <div class="banner-viewport" id="bannerViewport">
+              <div class="banner" id="banner" aria-label="Banner preview">
+                <div class="logo-slot logo-slot-left" aria-hidden="true">
+                  <img
+                    class="banner-logo"
+                    src="./9ef5593a-f6d5-403c-8da9-908024e3b4e3.JPG"
+                    alt=""
+                    draggable="false"
+                  />
+                </div>
+
+                <div
+                  class="banner-text"
+                  id="bannerText"
+                  contenteditable="true"
+                  role="textbox"
+                  aria-multiline="true"
+                  aria-label="Banner text. Click and type to edit."
+                  spellcheck="false"
+                ></div>
+
+                <div class="logo-slot logo-slot-right" aria-hidden="true">
+                  <img
+                    class="banner-logo"
+                    src="./9ef5593a-f6d5-403c-8da9-908024e3b4e3.JPG"
+                    alt=""
+                    draggable="false"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <p class="canvas-caption">
+              The blue editing outline is only a guide and will not appear in the downloaded image.
+            </p>
+          </div>
+
+          <div class="controls-grid">
+            <section class="control-panel" aria-labelledby="colorPanelTitle">
+              <div class="panel-heading">
+                <div class="panel-icon panel-icon-color" aria-hidden="true">◐</div>
+                <div>
+                  <h3 id="colorPanelTitle">Colours</h3>
+                  <p>Choose visually or enter an exact hex value.</p>
+                </div>
+              </div>
+
+              <div class="color-controls">
+                <label class="color-control" for="textColor">
+                  <span class="control-label">Text</span>
+                  <span class="color-input-row">
+                    <input id="textColor" type="color" aria-label="Text color picker" />
+                    <input id="textHex" class="hex-input" type="text" maxlength="7" spellcheck="false" aria-label="Text color hex value" />
+                  </span>
+                </label>
+
+                <label class="color-control" for="backgroundColor">
+                  <span class="control-label">Background</span>
+                  <span class="color-input-row">
+                    <input id="backgroundColor" type="color" aria-label="Background color picker" />
+                    <input id="backgroundHex" class="hex-input" type="text" maxlength="7" spellcheck="false" aria-label="Background color hex value" />
+                  </span>
+                </label>
+
+                <label class="color-control" for="borderColor">
+                  <span class="control-label">Border</span>
+                  <span class="color-input-row">
+                    <input id="borderColor" type="color" aria-label="Border color picker" />
+                    <input id="borderHex" class="hex-input" type="text" maxlength="7" spellcheck="false" aria-label="Border color hex value" />
+                  </span>
+                </label>
+              </div>
+            </section>
+
+            <section class="control-panel" aria-labelledby="layoutPanelTitle">
+              <div class="panel-heading">
+                <div class="panel-icon panel-icon-layout" aria-hidden="true">↔</div>
+                <div>
+                  <h3 id="layoutPanelTitle">Layout</h3>
+                  <p>Fine-tune the frame and coloured logos.</p>
+                </div>
+              </div>
+
+              <div class="range-controls">
+                <label class="range-control" for="logoSizeRange">
+                  <span class="range-label-row">
+                    <span>Logo height</span>
+                    <output id="logoSizeOutput" for="logoSizeRange">214 px</output>
+                  </span>
+                  <input id="logoSizeRange" type="range" min="140" max="255" step="1" />
+                </label>
+
+                <label class="range-control" for="borderWidthRange">
+                  <span class="range-label-row">
+                    <span>Border thickness</span>
+                    <output id="borderWidthOutput" for="borderWidthRange">6 px</output>
+                  </span>
+                  <input id="borderWidthRange" type="range" min="0" max="14" step="1" />
+                </label>
+              </div>
+            </section>
+
+            <section class="control-panel export-panel" aria-labelledby="exportPanelTitle">
+              <div class="panel-heading">
+                <div class="panel-icon panel-icon-export" aria-hidden="true">↓</div>
+                <div>
+                  <h3 id="exportPanelTitle">Export</h3>
+                  <p>Download a clean PNG or JPEG.</p>
+                </div>
+              </div>
+
+              <div class="export-controls">
+                <div class="export-options">
+                  <label class="select-control" for="exportFormat">
+                    <span class="control-label">Format</span>
+                    <select id="exportFormat">
+                      <option value="png" selected>PNG</option>
+                      <option value="jpeg">JPEG</option>
+                    </select>
+                  </label>
+                  <label class="select-control" for="exportScale">
+                    <span class="control-label">Resolution</span>
+                    <select id="exportScale">
+                      <option value="1">Standard · 1920 × 300</option>
+                      <option value="2" selected>High · 3840 × 600</option>
+                      <option value="3">Print · 5760 × 900</option>
+                    </select>
+                  </label>
+                </div>
+                <button class="button button-primary" id="downloadButton" type="button">
+                  <span aria-hidden="true">↓</span>
+                  Download PNG
+                </button>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <span>School Banner</span>
+        <span>Runs entirely in your browser · No upload required</span>
+      </footer>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
