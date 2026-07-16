@@ -394,23 +394,11 @@ input[type="range"] {
   overflow: hidden;
 }
 
-.logo-slot::after {
-  content: "";
-  position: absolute;
-  top: calc(50% - (var(--logo-height) * 0.5));
-  left: calc(50% + (var(--logo-height) * 0.113));
-  width: calc(var(--logo-height) * 0.054);
-  height: calc(var(--logo-height) * 0.063);
-  background: var(--banner-background);
-  pointer-events: none;
-}
-
 .banner-logo {
   width: auto;
   height: var(--logo-height);
   display: block;
   object-fit: contain;
-  mix-blend-mode: multiply;
   user-select: none;
   -webkit-user-drag: none;
 }

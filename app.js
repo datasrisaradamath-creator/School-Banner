@@ -72,6 +72,7 @@ const elements = {
 let state = loadState();
 let saveTimer;
 let logoPromise;
+let transparentLogoSource;
 
 function loadState() {
   try {
@@ -249,6 +250,74 @@ function loadLogo() {
   return logoPromise;
 }
 
+function getTransparentLogoSource(image) {
+  if (transparentLogoSource) return transparentLogoSource;
+
+  const source = document.createElement("canvas");
+  source.width = image.naturalWidth;
+  source.height = Math.round(image.naturalHeight * 0.982);
+  const sourceContext = source.getContext("2d", { willReadFrequently: true });
+  sourceContext.drawImage(image, 0, 0);
+
+  const imageData = sourceContext.getImageData(0, 0, source.width, source.height);
+  const pixels = imageData.data;
+  const visited = new Uint8Array(source.width * source.height);
+  const queue = new Int32Array(source.width * source.height);
+  let queueStart = 0;
+  let queueEnd = 0;
+
+  const isBackground = (pixelIndex) => {
+    const offset = pixelIndex * 4;
+    const red = pixels[offset];
+    const green = pixels[offset + 1];
+    const blue = pixels[offset + 2];
+    const brightest = Math.max(red, green, blue);
+    const darkest = Math.min(red, green, blue);
+    return red > 218 && green > 218 && blue > 218 && brightest - darkest < 28;
+  };
+
+  const enqueue = (pixelIndex) => {
+    if (visited[pixelIndex] || !isBackground(pixelIndex)) return;
+    visited[pixelIndex] = 1;
+    queue[queueEnd++] = pixelIndex;
+  };
+
+  for (let x = 0; x < source.width; x += 1) {
+    enqueue(x);
+    enqueue((source.height - 1) * source.width + x);
+  }
+  for (let y = 0; y < source.height; y += 1) {
+    enqueue(y * source.width);
+    enqueue(y * source.width + source.width - 1);
+  }
+
+  while (queueStart < queueEnd) {
+    const pixelIndex = queue[queueStart++];
+    const x = pixelIndex % source.width;
+    const y = Math.floor(pixelIndex / source.width);
+    pixels[pixelIndex * 4 + 3] = 0;
+    if (x > 0) enqueue(pixelIndex - 1);
+    if (x < source.width - 1) enqueue(pixelIndex + 1);
+    if (y > 0) enqueue(pixelIndex - source.width);
+    if (y < source.height - 1) enqueue(pixelIndex + source.width);
+  }
+
+  sourceContext.putImageData(imageData, 0, 0);
+  // Remove the small orange screenshot artefact above the right side of the snake.
+  sourceContext.clearRect(690, 0, 70, 82);
+  transparentLogoSource = source;
+  return transparentLogoSource;
+}
+
+async function prepareLogoPreview() {
+  const logo = await loadLogo();
+  const source = getTransparentLogoSource(logo);
+  const transparentLogoUrl = source.toDataURL("image/png");
+  for (const image of document.querySelectorAll(".banner-logo")) {
+    image.src = transparentLogoUrl;
+  }
+}
+
 function getCanvasFont(size) {
   const italic = state.italic ? "italic " : "";
   const weight = state.bold ? "700 " : "400 ";
@@ -271,23 +340,9 @@ function getFittedLines(context, text, maxWidth, maxHeight) {
   return { fontSize, lines, lineHeight };
 }
 
-function createCleanLogoSource(image) {
-  const source = document.createElement("canvas");
-  source.width = image.naturalWidth;
-  source.height = Math.round(image.naturalHeight * 0.982);
-  const sourceContext = source.getContext("2d");
-  sourceContext.drawImage(image, 0, 0);
-  // Remove the small orange screenshot artefact above the right side of the snake.
-  sourceContext.fillStyle = "#FFFFFF";
-  sourceContext.fillRect(690, 0, 70, 82);
-  return source;
-}
-
 function drawLogo(context, source, x, y, height) {
   const ratio = source.width / source.height;
   const width = height * ratio;
-  context.save();
-  context.globalCompositeOperation = "multiply";
   context.drawImage(
     source,
     0,
@@ -299,7 +354,6 @@ function drawLogo(context, source, x, y, height) {
     width,
     height,
   );
-  context.restore();
 }
 
 async function exportBanner() {
@@ -331,7 +385,7 @@ async function exportBanner() {
       context.strokeRect(halfBorder, halfBorder, DESIGN_WIDTH - state.borderWidth, DESIGN_HEIGHT - state.borderWidth);
     }
 
-    const logoSource = createCleanLogoSource(logo);
+    const logoSource = getTransparentLogoSource(logo);
     const logoY = (DESIGN_HEIGHT - state.logoSize) / 2;
     drawLogo(context, logoSource, 150, logoY, state.logoSize);
     drawLogo(context, logoSource, DESIGN_WIDTH - 150, logoY, state.logoSize);
@@ -434,4 +488,4 @@ populateFonts();
 applyState({ updateText: true });
 bindEvents();
 scaleBanner();
-loadLogo().catch(() => {});
+prepareLogoPreview().catch(() => {});
