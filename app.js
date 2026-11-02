@@ -1,4 +1,5 @@
 import { cleanEditableText, normalizeHex, wrapText } from "./banner-utils.mjs";
+import { downloadDesignsDocx } from "./word-export.mjs";
 
 const DESIGN_WIDTH = 1920;
 const DESIGN_HEIGHT = 300;
@@ -13,6 +14,12 @@ const DEFAULT_TEXT = [
 ].join("\n");
 
 const FONT_OPTIONS = {
+  Cinzel: "'Cinzel', Georgia, serif",
+  "Libre Baskerville": "'Libre Baskerville', Georgia, serif",
+  "Roboto Slab": "'Roboto Slab', Georgia, serif",
+  Montserrat: "'Montserrat', Arial, sans-serif",
+  Oswald: "'Oswald', Arial, sans-serif",
+  "Bebas Neue": "'Bebas Neue', Arial, sans-serif",
   Arial: "Arial, Helvetica, sans-serif",
   "Arial Black": "'Arial Black', 'Arial Bold', sans-serif",
   Calibri: "Calibri, 'Segoe UI', sans-serif",
@@ -37,6 +44,8 @@ const defaultState = Object.freeze({
   borderColor: "#171717",
   borderWidth: 6,
   logoSize: 214,
+  heritageLogoSize: 300,
+  heritageGap: 20,
   layout: "classic",
 });
 
@@ -61,6 +70,9 @@ const elements = {
   borderHex: document.querySelector("#borderHex"),
   logoSizeRange: document.querySelector("#logoSizeRange"),
   logoSizeOutput: document.querySelector("#logoSizeOutput"),
+  heritageGapControl: document.querySelector("#heritageGapControl"),
+  heritageGapRange: document.querySelector("#heritageGapRange"),
+  heritageGapOutput: document.querySelector("#heritageGapOutput"),
   borderWidthRange: document.querySelector("#borderWidthRange"),
   borderWidthOutput: document.querySelector("#borderWidthOutput"),
   exportFormat: document.querySelector("#exportFormat"),
@@ -86,6 +98,8 @@ function loadState() {
     next.font = FONT_OPTIONS[next.font] ? next.font : defaultState.font;
     next.fontSize = clampNumber(next.fontSize, 24, 64, defaultState.fontSize);
     next.logoSize = clampNumber(next.logoSize, 140, 255, defaultState.logoSize);
+    next.heritageLogoSize = clampNumber(next.heritageLogoSize, 240, 400, defaultState.heritageLogoSize);
+    next.heritageGap = clampNumber(next.heritageGap, 0, 100, defaultState.heritageGap);
     next.borderWidth = clampNumber(next.borderWidth, 0, 14, defaultState.borderWidth);
     next.textColor = normalizeHex(next.textColor) || defaultState.textColor;
     next.backgroundColor = normalizeHex(next.backgroundColor) || defaultState.backgroundColor;
@@ -93,7 +107,7 @@ function loadState() {
     next.align = ["left", "center", "right"].includes(next.align) ? next.align : defaultState.align;
     next.bold = Boolean(next.bold);
     next.italic = Boolean(next.italic);
-    next.layout = ["classic", "top", "left"].includes(next.layout) ? next.layout : "classic";
+    next.layout = ["classic", "top", "left", "arched"].includes(next.layout) ? next.layout : "classic";
     delete next.led;
     return next;
   } catch {
@@ -132,7 +146,25 @@ function applyState({ updateText = false } = {}) {
   elements.banner.style.setProperty("--banner-background", state.backgroundColor);
   elements.banner.style.setProperty("--banner-border", state.borderColor);
   elements.banner.style.setProperty("--border-width", `${state.borderWidth}px`);
+  elements.banner.style.setProperty("--inner-border-width", `${state.borderWidth > 0 ? Math.max(1, state.borderWidth / 2) : 0}px`);
+  elements.banner.classList.toggle("has-border", state.borderWidth > 0);
   elements.banner.style.setProperty("--logo-height", `${state.logoSize}px`);
+  elements.banner.style.setProperty("--heritage-logo-height", `${state.heritageLogoSize}px`);
+  elements.banner.style.setProperty("--heritage-gap", `${state.heritageGap}px`);
+  elements.heritageGapControl.hidden = state.layout !== "arched";
+  elements.heritageGapRange.value = String(state.heritageGap);
+  elements.heritageGapOutput.textContent = `${state.heritageGap} px`;
+  elements.logoSizeRange.min = state.layout === "arched" ? "240" : "140";
+  elements.logoSizeRange.max = state.layout === "arched" ? "400" : "255";
+  if (state.layout === "arched") {
+    const frame = document.createElement("canvas");
+    frame.width = 1200;
+    frame.height = 800;
+    drawArchedFrame(frame.getContext("2d"));
+    elements.banner.style.backgroundImage = `url(${frame.toDataURL()})`;
+  } else {
+    elements.banner.style.backgroundImage = "none";
+  }
 
   Object.assign(elements.bannerText.style, {
     color: state.textColor,
@@ -164,9 +196,10 @@ function applyState({ updateText = false } = {}) {
   syncColorControls("text", state.textColor);
   syncColorControls("background", state.backgroundColor);
   syncColorControls("border", state.borderColor);
-  elements.logoSizeRange.value = String(state.logoSize);
-  elements.logoSizeOutput.value = `${state.logoSize} px`;
-  elements.logoSizeOutput.textContent = `${state.logoSize} px`;
+  const activeLogoSize = state.layout === "arched" ? state.heritageLogoSize : state.logoSize;
+  elements.logoSizeRange.value = String(activeLogoSize);
+  elements.logoSizeOutput.value = `${activeLogoSize} px`;
+  elements.logoSizeOutput.textContent = `${activeLogoSize} px`;
   elements.borderWidthRange.value = String(state.borderWidth);
   elements.borderWidthOutput.value = `${state.borderWidth} px`;
   elements.borderWidthOutput.textContent = `${state.borderWidth} px`;
@@ -198,10 +231,12 @@ function updateState(patch, options) {
 }
 
 function getDesignHeight() {
+  if (state.layout === "arched") return 800;
   return state.layout === "top" ? 1000 : DESIGN_HEIGHT;
 }
 
 function getDesignWidth() {
+  if (state.layout === "arched") return 1200;
   return state.layout === "top" ? 1000 : DESIGN_WIDTH;
 }
 
@@ -214,10 +249,46 @@ function scaleBanner() {
 }
 
 function checkOverflow() {
+  if (state.layout === "arched") {
+    const context = document.createElement("canvas").getContext("2d");
+    const availableHeight = 745 - 120 - state.heritageLogoSize - state.heritageGap;
+    const fitted = getFittedLines(context, cleanEditableText(elements.bannerText.innerText), 1030, availableHeight);
+    elements.bannerText.style.fontSize = `${fitted.fontSize}px`;
+  }
   const isOverflowing =
     elements.bannerText.scrollHeight > elements.bannerText.clientHeight + 2 ||
     elements.bannerText.scrollWidth > elements.bannerText.clientWidth + 2;
   elements.overflowMessage.hidden = !isOverflowing;
+}
+
+function archedPath(inset = 0) {
+  const path = new Path2D();
+  path.moveTo(20 + inset, 780 - inset);
+  path.lineTo(20 + inset, 250 + inset);
+  path.lineTo(140 + inset, 250 + inset);
+  path.lineTo(140 + inset, 160 + inset);
+  path.lineTo(320 + inset * 0.4, 160 + inset);
+  path.bezierCurveTo(475, 5 + inset, 725, 5 + inset, 880 - inset * 0.4, 160 + inset);
+  path.lineTo(1060 - inset, 160 + inset);
+  path.lineTo(1060 - inset, 250 + inset);
+  path.lineTo(1180 - inset, 250 + inset);
+  path.lineTo(1180 - inset, 780 - inset);
+  path.closePath();
+  return path;
+}
+
+function drawArchedFrame(context) {
+  const path = archedPath();
+  context.fillStyle = state.backgroundColor;
+  context.fill(path);
+  if (state.borderWidth > 0) {
+    context.strokeStyle = state.borderColor;
+    context.lineWidth = state.borderWidth;
+    context.lineJoin = "round";
+    context.stroke(path);
+    context.lineWidth = Math.max(1, state.borderWidth / 2);
+    context.stroke(archedPath(18 + state.borderWidth));
+  }
 }
 
 function bindColorControl(prefix, stateKey) {
@@ -378,10 +449,10 @@ function drawLogo(context, source, x, y, height) {
   );
 }
 
-async function exportBanner() {
+async function exportBanner({ capture = false } = {}) {
   const designWidth = getDesignWidth();
   const designHeight = getDesignHeight();
-  const exportScale = Number(elements.exportScale.value);
+  const exportScale = capture ? 1 : Number(elements.exportScale.value);
   const exportFormat = elements.exportFormat.value;
   const isJpeg = exportFormat === "jpeg";
   const mimeType = isJpeg ? "image/jpeg" : "image/png";
@@ -396,31 +467,44 @@ async function exportBanner() {
   elements.downloadButton.lastChild.textContent = " Preparing…";
 
   try {
+    await document.fonts.load(getCanvasFont(state.fontSize));
     await document.fonts.ready;
     const logo = await loadLogo();
     context.scale(exportScale, exportScale);
-    context.fillStyle = state.backgroundColor;
-    context.fillRect(0, 0, designWidth, designHeight);
+    if (state.layout === "arched") {
+      if (isJpeg) {
+        context.fillStyle = "#FFFFFF";
+        context.fillRect(0, 0, designWidth, designHeight);
+      }
+      drawArchedFrame(context);
+    } else {
+      context.fillStyle = state.backgroundColor;
+      context.fillRect(0, 0, designWidth, designHeight);
+    }
 
     const halfBorder = state.borderWidth / 2;
-    if (state.borderWidth > 0) {
+    if (state.borderWidth > 0 && state.layout !== "arched") {
       context.strokeStyle = state.borderColor;
       context.lineWidth = state.borderWidth;
       context.strokeRect(halfBorder, halfBorder, designWidth - state.borderWidth, designHeight - state.borderWidth);
+      const innerWidth = Math.max(1, state.borderWidth / 2);
+      const innerInset = state.borderWidth + 12 + innerWidth / 2;
+      context.lineWidth = innerWidth;
+      context.strokeRect(innerInset, innerInset, designWidth - innerInset * 2, designHeight - innerInset * 2);
     }
 
     const logoSource = getTransparentLogoSource(logo);
-    const logoHeight = state.layout === "top" ? state.logoSize * 2 : state.logoSize;
-    const logoY = state.layout === "top" ? 55 : (designHeight - logoHeight) / 2;
-    drawLogo(context, logoSource, state.layout === "top" ? designWidth / 2 : 150, logoY, logoHeight);
+    const logoHeight = state.layout === "arched" ? state.heritageLogoSize : state.layout === "top" ? state.logoSize * 2 : state.logoSize;
+    const logoY = state.layout === "arched" ? 120 : state.layout === "top" ? 55 : (designHeight - logoHeight) / 2;
+    drawLogo(context, logoSource, ["top", "arched"].includes(state.layout) ? designWidth / 2 : 150, logoY, logoHeight);
     if (state.layout === "classic") drawLogo(context, logoSource, designWidth - 150, logoY, logoHeight);
 
-    const textLeft = state.layout === "top" ? 60 : 300;
-    const textRight = designWidth - (state.layout === "classic" ? 300 : state.layout === "top" ? 60 : 100);
+    const textLeft = state.layout === "arched" ? 85 : state.layout === "top" ? 60 : 300;
+    const textRight = designWidth - (state.layout === "arched" ? 85 : state.layout === "classic" ? 300 : state.layout === "top" ? 60 : 100);
     const maxTextWidth = textRight - textLeft;
     const text = cleanEditableText(elements.bannerText.innerText) || DEFAULT_TEXT;
-    const textTop = state.layout === "top" ? logoHeight + 90 : 17;
-    const textBottom = designHeight - (state.layout === "top" ? 55 : 17);
+    const textTop = state.layout === "arched" ? 120 + logoHeight + state.heritageGap : state.layout === "top" ? logoHeight + 90 : 17;
+    const textBottom = designHeight - (["top", "arched"].includes(state.layout) ? 55 : 17);
     const { fontSize, lines, lineHeight } = getFittedLines(context, text, maxTextWidth, textBottom - textTop);
     context.font = getCanvasFont(fontSize);
     context.fillStyle = state.textColor;
@@ -429,8 +513,10 @@ async function exportBanner() {
 
     const textX = state.align === "left" ? textLeft : state.align === "right" ? textRight : (textLeft + textRight) / 2;
     const blockHeight = (lines.length - 1) * lineHeight;
-    const startY = (textTop + textBottom) / 2 - blockHeight / 2;
+    const startY = state.layout === "arched" ? textTop + lineHeight / 2 : (textTop + textBottom) / 2 - blockHeight / 2;
     lines.forEach((line, index) => context.fillText(line, textX, startY + index * lineHeight));
+
+    if (capture) return canvas;
 
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, mimeType, isJpeg ? 0.94 : undefined));
     if (!blob) throw new Error(`The browser could not create the ${exportFormat.toUpperCase()} file.`);
@@ -483,7 +569,8 @@ function bindEvents() {
   bindColorControl("background", "backgroundColor");
   bindColorControl("border", "borderColor");
 
-  elements.logoSizeRange.addEventListener("input", () => updateState({ logoSize: Number(elements.logoSizeRange.value) }));
+  elements.logoSizeRange.addEventListener("input", () => updateState({ [state.layout === "arched" ? "heritageLogoSize" : "logoSize"]: Number(elements.logoSizeRange.value) }));
+  elements.heritageGapRange.addEventListener("input", () => updateState({ heritageGap: Number(elements.heritageGapRange.value) }));
   elements.borderWidthRange.addEventListener("input", () => updateState({ borderWidth: Number(elements.borderWidthRange.value) }));
 
   for (const button of [elements.undoButton, elements.redoButton]) {
@@ -517,3 +604,100 @@ applyState({ updateText: true });
 bindEvents();
 scaleBanner();
 prepareLogoPreview().catch(() => {});
+document.fonts.addEventListener("loadingdone", checkOverflow);
+
+const FAVORITES_KEY = "school-banner-favorites-v1";
+let favorites;
+try { favorites = JSON.parse(localStorage.getItem(FAVORITES_KEY)) || []; } catch { favorites = []; }
+if (!Array.isArray(favorites)) favorites = [];
+const gallery = document.querySelector("#savedGallery");
+const galleryStatus = document.querySelector("#galleryStatus");
+function designMetadata(savedState) {
+  const design = { ...defaultState, ...savedState };
+  return [
+    `Text colour: ${design.textColor} | Background: ${design.backgroundColor} | Border: ${design.borderColor}`,
+    `Font: ${design.font} | Size: ${design.fontSize} px | ${design.bold ? "Bold" : "Regular"}${design.italic ? " Italic" : ""} | Alignment: ${design.align}`,
+    `Border thickness: ${design.borderWidth} px | Logo size: ${design.logoSize} px`,
+    `Heritage emblem: ${design.heritageLogoSize} px | Emblem to text spacing: ${design.heritageGap} px`,
+  ];
+}
+function renderFavorites() {
+  gallery.replaceChildren();
+  for (const favorite of favorites) {
+    const card = document.createElement("article");
+    const image = document.createElement("img"); image.src = favorite.image; image.alt = favorite.name;
+    const title = document.createElement("h4"); title.textContent = favorite.name;
+    const metadata = document.createElement("div"); metadata.className = "design-metadata";
+    for (const detail of designMetadata(favorite.state)) {
+      const paragraph = document.createElement("p"); paragraph.textContent = detail; metadata.append(paragraph);
+    }
+    const restore = document.createElement("button"); restore.className = "button button-quiet"; restore.textContent = "Restore";
+    const layoutPicker = document.createElement("select");
+    layoutPicker.setAttribute("aria-label", `Layout to restore for ${favorite.name}`);
+    for (const option of elements.layoutSelect.options) layoutPicker.append(option.cloneNode(true));
+    layoutPicker.value = favorite.state.layout || "classic";
+    const coverage = document.createElement("p"); coverage.textContent = "All 4 layouts saved · choose one to restore";
+    restore.onclick = () => { state = { ...defaultState, ...favorite.state, layout: layoutPicker.value }; applyState({ updateText: true }); queueSave(); };
+    const remove = document.createElement("button"); remove.className = "button button-quiet"; remove.textContent = "Delete";
+    remove.onclick = () => {
+      if (!confirm(`Delete saved choice “${favorite.name}”?`)) return;
+      const next = favorites.filter(item => item.id !== favorite.id);
+      try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(next)); favorites = next; renderFavorites(); }
+      catch { galleryStatus.textContent = "Could not update saved choices."; }
+    };
+    card.append(image, title, coverage, metadata, layoutPicker, restore, remove); gallery.append(card);
+  }
+  document.querySelector("#downloadWord").disabled = favorites.length === 0;
+}
+document.querySelector("#saveDesign").onclick = async () => {
+  const button = document.querySelector("#saveDesign"); button.disabled = true;
+  try {
+    const snapshot = { ...state, text: cleanEditableText(elements.bannerText.innerText) || DEFAULT_TEXT };
+    const canvas = await exportBanner({ capture: true });
+    if (!canvas) throw new Error("Could not capture the design.");
+    const thumbnail = document.createElement("canvas"); thumbnail.width = 480; thumbnail.height = Math.round(480 * canvas.height / canvas.width);
+    thumbnail.getContext("2d").drawImage(canvas, 0, 0, thumbnail.width, thumbnail.height);
+    const name = document.querySelector("#designName").value.trim() || `Choice ${favorites.length + 1}`;
+    const next = [...favorites, { id: crypto.randomUUID(), name, state: snapshot, layouts: [...elements.layoutSelect.options].map(option => option.value), image: thumbnail.toDataURL("image/png") }];
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(next)); favorites = next; renderFavorites();
+    galleryStatus.textContent = `Saved “${name}” for all four layouts.`; document.querySelector("#designName").value = "";
+  } catch (error) { galleryStatus.textContent = `Could not save: ${error.message} Your existing choices are preserved.`; }
+  finally { button.disabled = false; }
+};
+document.querySelector("#downloadWord").onclick = async () => {
+  const button = document.querySelector("#downloadWord"); button.disabled = true;
+  const original = { ...state, text: cleanEditableText(elements.bannerText.innerText) || DEFAULT_TEXT };
+  const layoutOrder = ["arched", "top", "classic", "left"];
+  const layouts = [...elements.layoutSelect.options].map(option => ({ value: option.value, name: option.textContent })).sort((a, b) => layoutOrder.indexOf(a.value) - layoutOrder.indexOf(b.value));
+  try {
+    const images = [];
+    const backgroundBrightness = (favorite) => {
+      const hex = normalizeHex(favorite.state.backgroundColor) || defaultState.backgroundColor;
+      const channels = [1, 3, 5].map(offset => {
+        const channel = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    };
+    const exportChoices = [...favorites].sort((a, b) => backgroundBrightness(a) - backgroundBrightness(b));
+    for (const favorite of exportChoices) {
+      for (const layout of layouts) {
+        galleryStatus.textContent = `Preparing ${images.length + 1} of ${favorites.length * layouts.length} images…`;
+        state = { ...defaultState, ...favorite.state, layout: layout.value }; applyState({ updateText: true });
+        const canvas = await exportBanner({ capture: true });
+        if (!canvas) throw new Error("Could not render a saved choice.");
+        images.push({ choiceId: favorite.id, choiceName: favorite.name, layout: layout.value, layoutName: layout.name, name: `${favorite.name} — ${layout.name}`, metadata: designMetadata(state), data: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height });
+      }
+    }
+    downloadDesignsDocx(images);
+    galleryStatus.textContent = `Downloaded ${images.length} images in Word.`;
+  } catch (error) { galleryStatus.textContent = `Word export failed: ${error.message}`; }
+  finally { state = original; applyState({ updateText: true }); button.disabled = favorites.length === 0; }
+};
+document.querySelector("#backupChoices").onclick = () => {
+  const backup = { version: 1, savedAt: new Date().toISOString(), choices: favorites };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
+  const link = document.createElement("a"); link.href = url; link.download = "school-banner-choices-backup.json"; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+renderFavorites();
