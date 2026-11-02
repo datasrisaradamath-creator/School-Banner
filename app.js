@@ -37,9 +37,13 @@ const defaultState = Object.freeze({
   borderColor: "#171717",
   borderWidth: 6,
   logoSize: 214,
+  layout: "classic",
+  led: false,
 });
 
 const elements = {
+  layoutSelect: document.querySelector("#layoutSelect"),
+  ledToggle: document.querySelector("#ledToggle"),
   banner: document.querySelector("#banner"),
   bannerViewport: document.querySelector("#bannerViewport"),
   bannerText: document.querySelector("#bannerText"),
@@ -91,6 +95,8 @@ function loadState() {
     next.align = ["left", "center", "right"].includes(next.align) ? next.align : defaultState.align;
     next.bold = Boolean(next.bold);
     next.italic = Boolean(next.italic);
+    next.layout = ["classic", "top", "left"].includes(next.layout) ? next.layout : "classic";
+    next.led = Boolean(next.led);
     return next;
   } catch {
     return { ...defaultState };
@@ -115,6 +121,17 @@ function populateFonts() {
 }
 
 function applyState({ updateText = false } = {}) {
+  elements.layoutSelect.value = state.layout;
+  elements.ledToggle.checked = state.led;
+  elements.banner.dataset.layout = state.layout;
+  elements.banner.classList.toggle("has-led", state.led);
+  elements.banner.style.setProperty("--glow-color", state.textColor);
+  elements.banner.style.height = `${getDesignHeight()}px`;
+  for (const option of elements.exportScale.options) {
+    const scale = Number(option.value);
+    option.textContent = `${scale === 1 ? "Standard" : scale === 2 ? "High" : "Print"} · ${DESIGN_WIDTH * scale} × ${getDesignHeight() * scale}`;
+  }
+  scaleBanner();
   const family = FONT_OPTIONS[state.font];
   elements.banner.style.setProperty("--banner-background", state.backgroundColor);
   elements.banner.style.setProperty("--banner-border", state.borderColor);
@@ -184,11 +201,15 @@ function updateState(patch, options) {
   queueSave();
 }
 
+function getDesignHeight() {
+  return state.layout === "top" ? 650 : DESIGN_HEIGHT;
+}
+
 function scaleBanner() {
   const availableWidth = elements.bannerViewport.clientWidth;
   const scale = Math.min(1, availableWidth / DESIGN_WIDTH);
   elements.banner.style.transform = `scale(${scale})`;
-  elements.bannerViewport.style.height = `${DESIGN_HEIGHT * scale}px`;
+  elements.bannerViewport.style.height = `${getDesignHeight() * scale}px`;
 }
 
 function checkOverflow() {
@@ -357,6 +378,7 @@ function drawLogo(context, source, x, y, height) {
 }
 
 async function exportBanner() {
+  const designHeight = getDesignHeight();
   const exportScale = Number(elements.exportScale.value);
   const exportFormat = elements.exportFormat.value;
   const isJpeg = exportFormat === "jpeg";
@@ -364,7 +386,7 @@ async function exportBanner() {
   const extension = isJpeg ? "jpg" : "png";
   const canvas = document.createElement("canvas");
   canvas.width = DESIGN_WIDTH * exportScale;
-  canvas.height = DESIGN_HEIGHT * exportScale;
+  canvas.height = designHeight * exportScale;
   const context = canvas.getContext("2d");
 
   elements.downloadButton.disabled = true;
@@ -376,41 +398,49 @@ async function exportBanner() {
     const logo = await loadLogo();
     context.scale(exportScale, exportScale);
     context.fillStyle = state.backgroundColor;
-    context.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+    context.fillRect(0, 0, DESIGN_WIDTH, designHeight);
 
     const halfBorder = state.borderWidth / 2;
     if (state.borderWidth > 0) {
       context.strokeStyle = state.borderColor;
       context.lineWidth = state.borderWidth;
-      context.strokeRect(halfBorder, halfBorder, DESIGN_WIDTH - state.borderWidth, DESIGN_HEIGHT - state.borderWidth);
+      context.strokeRect(halfBorder, halfBorder, DESIGN_WIDTH - state.borderWidth, designHeight - state.borderWidth);
     }
 
     const logoSource = getTransparentLogoSource(logo);
-    const logoY = (DESIGN_HEIGHT - state.logoSize) / 2;
-    drawLogo(context, logoSource, 150, logoY, state.logoSize);
-    drawLogo(context, logoSource, DESIGN_WIDTH - 150, logoY, state.logoSize);
+    const logoY = state.layout === "top" ? 30 : (designHeight - state.logoSize) / 2;
+    drawLogo(context, logoSource, state.layout === "top" ? DESIGN_WIDTH / 2 : 150, logoY, state.logoSize);
+    if (state.layout === "classic") drawLogo(context, logoSource, DESIGN_WIDTH - 150, logoY, state.logoSize);
 
-    const textLeft = 300;
-    const textRight = DESIGN_WIDTH - 300;
+    const textLeft = state.layout === "top" ? 100 : 300;
+    const textRight = DESIGN_WIDTH - (state.layout === "classic" ? 300 : 100);
     const maxTextWidth = textRight - textLeft;
     const text = cleanEditableText(elements.bannerText.innerText) || DEFAULT_TEXT;
-    const { fontSize, lines, lineHeight } = getFittedLines(context, text, maxTextWidth, DESIGN_HEIGHT - 34);
+    const textTop = state.layout === "top" ? state.logoSize + 60 : 17;
+    const textBottom = designHeight - 17;
+    const { fontSize, lines, lineHeight } = getFittedLines(context, text, maxTextWidth, textBottom - textTop);
     context.font = getCanvasFont(fontSize);
     context.fillStyle = state.textColor;
     context.textBaseline = "middle";
     context.textAlign = state.align;
 
-    const textX = state.align === "left" ? textLeft : state.align === "right" ? textRight : DESIGN_WIDTH / 2;
+    const textX = state.align === "left" ? textLeft : state.align === "right" ? textRight : (textLeft + textRight) / 2;
     const blockHeight = (lines.length - 1) * lineHeight;
-    const startY = DESIGN_HEIGHT / 2 - blockHeight / 2;
-    lines.forEach((line, index) => context.fillText(line, textX, startY + index * lineHeight));
+    const startY = (textTop + textBottom) / 2 - blockHeight / 2;
+    context.save();
+    if (state.led) context.shadowColor = state.textColor;
+    for (const blur of (state.led ? [24, 12, 4, 0] : [0])) {
+      context.shadowBlur = blur * exportScale;
+      lines.forEach((line, index) => context.fillText(line, textX, startY + index * lineHeight));
+    }
+    context.restore();
 
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, mimeType, isJpeg ? 0.94 : undefined));
     if (!blob) throw new Error(`The browser could not create the ${exportFormat.toUpperCase()} file.`);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `school-banner-${DESIGN_WIDTH * exportScale}x${DESIGN_HEIGHT * exportScale}.${extension}`;
+    link.download = `school-banner-${DESIGN_WIDTH * exportScale}x${designHeight * exportScale}.${extension}`;
     document.body.append(link);
     link.click();
     link.remove();
@@ -430,6 +460,8 @@ function updateDownloadButtonLabel() {
 }
 
 function bindEvents() {
+  elements.layoutSelect.addEventListener("change", () => updateState({ layout: elements.layoutSelect.value }));
+  elements.ledToggle.addEventListener("change", () => updateState({ led: elements.ledToggle.checked }));
   elements.bannerText.addEventListener("input", () => {
     state = { ...state, text: cleanEditableText(elements.bannerText.innerText) };
     queueSave();

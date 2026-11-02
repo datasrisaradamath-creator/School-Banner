@@ -425,6 +425,51 @@ input[type="range"] {
   border-color: rgba(35, 93, 74, 0.42);
 }
 
+.banner[data-layout="left"] {
+  grid-template-columns: 300px minmax(0, 1fr) 100px;
+}
+
+.banner[data-layout="left"] .logo-slot-right,
+.banner[data-layout="top"] .logo-slot-right {
+  display: none;
+}
+
+.banner[data-layout="top"] {
+  display: flex;
+  flex-direction: column;
+  padding: 24px 94px 11px;
+}
+
+.banner[data-layout="top"] .logo-slot-left {
+  flex: 0 0 auto;
+  height: var(--logo-height);
+}
+
+.banner[data-layout="top"] .banner-text {
+  width: 100%;
+  flex: 1;
+  max-height: none;
+  margin-top: 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.banner.has-led .banner-text {
+  text-shadow: 0 0 4px var(--glow-color), 0 0 12px var(--glow-color), 0 0 24px var(--glow-color);
+}
+
+.led-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.led-toggle input { accent-color: var(--accent); }
+.lighting-hint { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.5; }
+
 .banner-text:focus {
   background: rgba(255, 255, 255, 0.28);
   border-color: #237258;
