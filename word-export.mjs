@@ -46,9 +46,9 @@ export function downloadDesignsDocx(images) {
     return `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="80"/></w:pPr>${anchorLink ? `<w:hyperlink w:anchor="${image.anchor}">${drawing}</w:hyperlink>` : drawing}</w:p>`;
   };
   const pageBreak = '<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:br w:type="page"/></w:r></w:p>';
-  let body = paragraph('School Banner Saved Choices', 36, true) + paragraph('Thumbnail index', 28, true) + paragraph('Select a Heritage thumbnail to jump to that saved choice.');
+  let body = paragraph('School Banner Saved Choices', 36, true) + paragraph('Thumbnail index', 28, true) + paragraph('Select a classic banner thumbnail to jump to that saved choice.');
   for (const group of groups) {
-    const heritage = group.images.find(image => image.layout === 'arched') || group.images[0];
+    const heritage = group.images[0];
     body += paragraph(group.name, 24, true);
     body += picture(heritage, 1.8, 1.2, true);
   }
@@ -56,16 +56,10 @@ export function downloadDesignsDocx(images) {
   let groupIndex = 0;
   for (const group of groups) {
     if (groupIndex++) body += pageBreak;
-    const heritage = group.images.find(i => i.layout === 'arched') || group.images[0];
-    const square = group.images.find(i => i.layout === 'top');
-    const banners = group.images.filter(i => i !== heritage && i !== square);
+    const heritage = group.images[0];
     const metadata = paragraph(group.name, 28, true) + paragraph('Saved settings', 22, true) + (heritage.metadata || []).map(detail => paragraph(detail)).join('');
     body += metadata + '<w:p><w:pPr><w:spacing w:after="0" w:line="700" w:lineRule="exact"/></w:pPr><w:r><w:t> </w:t></w:r></w:p>';
     body += bookmark(heritage.anchor) + paragraph(heritage.layoutName, 20, true) + picture(heritage, 6.5, 4.4);
-    if (banners[0]) body += bookmark(banners[0].anchor) + paragraph(banners[0].layoutName, 20, true) + picture(banners[0], 6.5, 1.1);
-    body += pageBreak;
-    if (square) body += bookmark(square.anchor) + paragraph(`${group.name} — ${square.layoutName}`, 20, true) + picture(square, 6.5, 6.5);
-    for (const image of banners.slice(1)) body += bookmark(image.anchor) + paragraph(image.layoutName, 20, true) + picture(image, 6.5, 1.1);
   }
   files.push(['[Content_Types].xml','<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>']);
   files.push(['_rels/.rels','<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>']);
