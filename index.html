@@ -179,14 +179,14 @@
               </div>
 
               <div class="range-controls">
-                <label class="select-control" for="layoutSelect">
+                <label class="select-control" for="layoutSelect" hidden>
                   <span class="control-label">Banner layout</span>
                   <select id="layoutSelect">
                     <option value="classic">Classic · emblem on both sides</option>
-                    <option value="top">Square signboard · emblem above text</option>
-                    <option value="arched">Heritage · arched school sign</option>
-                    <option value="left">Signature · emblem on the left</option>
                   </select>
+                </label>
+                <label class="emblem-mode" for="matchEmblemColor">
+                  <input id="matchEmblemColor" type="checkbox" /> Match emblem to text colour
                 </label>
                 <label class="range-control" for="logoSizeRange">
                   <span class="range-label-row">
@@ -202,6 +202,13 @@
                     <output id="borderWidthOutput" for="borderWidthRange">6 px</output>
                   </span>
                   <input id="borderWidthRange" type="range" min="0" max="14" step="1" />
+                </label>
+                <label class="range-control" for="sideSpacingRange">
+                  <span class="range-label-row">
+                    <span>Left/right spacing</span>
+                    <output id="sideSpacingOutput" for="sideSpacingRange">40 px</output>
+                  </span>
+                  <input id="sideSpacingRange" type="range" min="0" max="120" step="1" />
                 </label>
                 <label class="range-control" id="heritageGapControl" for="heritageGapRange" hidden>
                   <span class="range-label-row">
@@ -249,10 +256,10 @@
           </div>
           <section class="saved-section" aria-labelledby="savedTitle">
             <h3 id="savedTitle">Saved choices</h3>
-            <p>Each saved choice includes all four layouts with your text, colours, fonts and spacing. Restore any layout or download all choices in Word. Saved on this browser.</p>
+            <p>Save your classic rectangle with its text, colours, font and emblem style. Earlier saved choices are preserved and can be restored as classic rectangles. Saved on this browser.</p>
             <div class="saved-actions">
               <input id="designName" aria-label="Design name" placeholder="Name this design" maxlength="80" />
-              <button id="saveDesign" class="button button-primary" type="button">Save all layouts</button>
+              <button id="saveDesign" class="button button-primary" type="button">Save current design</button>
               <button id="downloadWord" class="button button-quiet" type="button">Download all saved in Word</button>
               <button id="backupChoices" class="button button-quiet" type="button">Back up saved choices</button>
             </div>
@@ -268,6 +275,20 @@
       </footer>
     </div>
 
+    <dialog id="saveEmblemDialog" aria-labelledby="saveEmblemTitle">
+      <form id="saveEmblemForm">
+        <h2 id="saveEmblemTitle">Choose the saved emblem style</h2>
+        <p>Your text, font, colours and spacing will be saved with this style.</p>
+        <label><input type="radio" name="savedEmblemStyle" value="original" /> Original-colour emblem</label>
+        <label><input type="radio" name="savedEmblemStyle" value="matching" /> Emblem matching the text colour</label>
+        <label><input type="radio" name="savedEmblemStyle" value="both" /> Both styles as two saved designs</label>
+        <p id="saveEmblemStatus" role="status"></p>
+        <div class="saved-actions">
+          <button id="cancelEmblemSave" class="button button-quiet" type="button">Cancel</button>
+          <button class="button button-primary" type="submit">Save design</button>
+        </div>
+      </form>
+    </dialog>
     <script type="module" src="./app.js"></script>
   </body>
 </html>
