@@ -387,7 +387,7 @@ input[type="range"] {
   width: 1920px;
   height: 300px;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 260px;
+  grid-template-columns: var(--logo-column-width, 260px) minmax(0, 1fr) var(--logo-column-width, 260px);
   padding-inline: var(--side-spacing, 40px);
   align-items: center;
   overflow: hidden;
@@ -422,7 +422,7 @@ input[type="range"] {
 }
 
 .banner-text {
-  max-height: 272px;
+  max-height: var(--text-max-height, 272px);
   padding: 8px 14px;
   overflow: hidden;
   color: #9e1014;
@@ -511,6 +511,7 @@ input[type="range"] {
 }
 .banner[data-layout="arched"] .banner-logo { height: var(--heritage-logo-height); }
 .range-control[hidden] { display: none; }
+.range-label-row input[type="number"] { width: 86px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font-size: 12px; }
 
 .canvas-caption {
   margin: 13px 0 0;

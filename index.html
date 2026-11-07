@@ -60,7 +60,7 @@
 
               <label class="range-tool compact-range" for="fontSizeRange">
                 <span>Size</span>
-                <input id="fontSizeRange" type="range" min="24" max="64" step="1" />
+                <input id="fontSizeRange" type="range" min="12" max="240" step="1" />
                 <output id="fontSizeOutput" for="fontSizeRange">40</output>
               </label>
             </div>
@@ -179,6 +179,15 @@
               </div>
 
               <div class="range-controls">
+                <button id="shortNameButton" class="button button-quiet" type="button">Start a Sarada Vihar board</button>
+                <label class="range-control" for="boardWidthRange">
+                  <span class="range-label-row"><span>Board width</span><input id="boardWidthInput" aria-label="Board width in pixels" type="number" min="400" max="3000" value="1920" /></span>
+                  <input id="boardWidthRange" type="range" min="400" max="3000" step="10" value="1920" />
+                </label>
+                <label class="range-control" for="boardHeightRange">
+                  <span class="range-label-row"><span>Board height</span><input id="boardHeightInput" aria-label="Board height in pixels" type="number" min="120" max="1200" value="300" /></span>
+                  <input id="boardHeightRange" type="range" min="120" max="1200" step="10" value="300" />
+                </label>
                 <label class="select-control" for="layoutSelect" hidden>
                   <span class="control-label">Banner layout</span>
                   <select id="layoutSelect">

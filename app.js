@@ -47,6 +47,8 @@ const defaultState = Object.freeze({
   borderColor: "#FFFFD9",
   borderWidth: 6,
   logoSize: 214,
+  boardWidth: DESIGN_WIDTH,
+  boardHeight: DESIGN_HEIGHT,
   sideSpacing: 40,
   heritageLogoSize: 300,
   heritageGap: 20,
@@ -55,6 +57,10 @@ const defaultState = Object.freeze({
 });
 
 const elements = {
+  boardWidthRange: document.querySelector("#boardWidthRange"),
+  boardHeightRange: document.querySelector("#boardHeightRange"),
+  boardWidthInput: document.querySelector("#boardWidthInput"),
+  boardHeightInput: document.querySelector("#boardHeightInput"),
   sideSpacingRange: document.querySelector("#sideSpacingRange"),
   sideSpacingOutput: document.querySelector("#sideSpacingOutput"),
   matchEmblemColor: document.querySelector("#matchEmblemColor"),
@@ -106,7 +112,9 @@ function loadState() {
     const next = { ...defaultState, ...stored };
     next.text = typeof next.text === "string" && next.text ? next.text : DEFAULT_TEXT;
     next.font = FONT_OPTIONS[next.font] ? next.font : defaultState.font;
-    next.fontSize = clampNumber(next.fontSize, 24, 64, defaultState.fontSize);
+    next.fontSize = clampNumber(next.fontSize, 12, 240, defaultState.fontSize);
+    next.boardWidth = clampNumber(next.boardWidth, 400, 3000, DESIGN_WIDTH);
+    next.boardHeight = clampNumber(next.boardHeight, 120, 1200, DESIGN_HEIGHT);
     next.logoSize = clampNumber(next.logoSize, 140, 255, defaultState.logoSize);
     next.sideSpacing = clampNumber(next.sideSpacing, 0, 120, defaultState.sideSpacing);
     next.heritageLogoSize = clampNumber(next.heritageLogoSize, 240, 400, defaultState.heritageLogoSize);
@@ -151,6 +159,11 @@ function applyState({ updateText = false } = {}) {
   elements.banner.dataset.layout = state.layout;
   elements.banner.style.width = `${getDesignWidth()}px`;
   elements.banner.style.height = `${getDesignHeight()}px`;
+  elements.boardWidthRange.value = elements.boardWidthInput.value = String(getDesignWidth());
+  elements.boardHeightRange.value = elements.boardHeightInput.value = String(getDesignHeight());
+  const geometry = getBoardGeometry();
+  elements.banner.style.setProperty("--logo-column-width", `${geometry.columnWidth}px`);
+  elements.banner.style.setProperty("--text-max-height", `${geometry.textHeight + 20}px`);
   for (const option of elements.exportScale.options) {
     const scale = Number(option.value);
     option.textContent = `${scale === 1 ? "Standard" : scale === 2 ? "High" : "Print"} · ${getDesignWidth() * scale} × ${getDesignHeight() * scale}`;
@@ -162,8 +175,8 @@ function applyState({ updateText = false } = {}) {
   elements.banner.style.setProperty("--border-width", `${state.borderWidth}px`);
   elements.banner.style.setProperty("--inner-border-width", `${state.borderWidth > 0 ? Math.max(1, state.borderWidth / 2) : 0}px`);
   elements.banner.classList.toggle("has-border", state.borderWidth > 0);
-  elements.banner.style.setProperty("--logo-height", `${state.logoSize}px`);
-  elements.banner.style.setProperty("--side-spacing", `${state.sideSpacing}px`);
+  elements.banner.style.setProperty("--logo-height", `${geometry.logoHeight}px`);
+  elements.banner.style.setProperty("--side-spacing", `${geometry.padding}px`);
   elements.sideSpacingRange.value = String(state.sideSpacing);
   elements.sideSpacingOutput.textContent = `${state.sideSpacing} px`;
   elements.banner.style.setProperty("--heritage-logo-height", `${state.heritageLogoSize}px`);
@@ -249,34 +262,40 @@ function updateState(patch, options) {
 }
 
 function getDesignHeight() {
-  if (state.layout === "arched") return 800;
-  return state.layout === "top" ? 1000 : DESIGN_HEIGHT;
+  return state.boardHeight || DESIGN_HEIGHT;
 }
 
 function getDesignWidth() {
-  if (state.layout === "arched") return 1200;
-  return state.layout === "top" ? 1000 : DESIGN_WIDTH;
+  return state.boardWidth || DESIGN_WIDTH;
+}
+
+function getBoardGeometry() {
+  const width = getDesignWidth(), height = getDesignHeight();
+  const padding = Math.min(state.sideSpacing, width * 0.08);
+  const columnWidth = Math.min(state.logoSize + 46, width * 0.22);
+  const logoHeight = Math.max(24, Math.min(state.logoSize, height - 56, columnWidth - 16));
+  const textLeft = state.borderWidth + padding + columnWidth + 16;
+  return { padding, columnWidth, logoHeight, logoCenter: state.borderWidth + padding + columnWidth / 2, textLeft, textWidth: width - 2 * textLeft, textHeight: height - 2 * state.borderWidth - 36 };
 }
 
 function scaleBanner() {
   const availableWidth = elements.bannerViewport.clientWidth;
-  const scale = Math.min(1, availableWidth / getDesignWidth(), state.layout === "top" ? 0.65 : 1);
+  const scale = Math.min(1, availableWidth / getDesignWidth(), 650 / getDesignHeight());
   elements.banner.style.left = `${Math.max(0, (availableWidth - getDesignWidth() * scale) / 2)}px`;
   elements.banner.style.transform = `scale(${scale})`;
   elements.bannerViewport.style.height = `${getDesignHeight() * scale}px`;
 }
 
 function checkOverflow() {
-  if (state.layout === "arched") {
-    const context = document.createElement("canvas").getContext("2d");
-    const availableHeight = 745 - 120 - state.heritageLogoSize - state.heritageGap;
-    const fitted = getFittedLines(context, cleanEditableText(elements.bannerText.innerText), 1030, availableHeight);
-    elements.bannerText.style.fontSize = `${fitted.fontSize}px`;
-  }
+  const context = document.createElement("canvas").getContext("2d");
+  const geometry = getBoardGeometry();
+  const fitted = getFittedLines(context, cleanEditableText(elements.bannerText.innerText), geometry.textWidth, geometry.textHeight);
+  elements.bannerText.style.fontSize = `${fitted.fontSize}px`;
   const isOverflowing =
     elements.bannerText.scrollHeight > elements.bannerText.clientHeight + 2 ||
     elements.bannerText.scrollWidth > elements.bannerText.clientWidth + 2;
-  elements.overflowMessage.hidden = !isOverflowing;
+  elements.overflowMessage.hidden = !isOverflowing && fitted.fontSize === state.fontSize;
+  elements.overflowMessage.textContent = isOverflowing ? "Text is crowded—enlarge the board or shorten the text." : `Text fitted to ${fitted.fontSize}px to stay inside the board (requested ${state.fontSize}px).`;
 }
 
 function archedPath(inset = 0) {
@@ -480,7 +499,11 @@ function getFittedLines(context, text, maxWidth, maxHeight) {
     lineHeight = fontSize * 1.27;
     if (lines.length * lineHeight <= maxHeight) break;
     fontSize -= 1;
-  } while (fontSize > 18);
+  } while (fontSize > 8);
+
+  context.font = getCanvasFont(fontSize);
+  lines = wrapText(text, (line) => context.measureText(line).width, maxWidth);
+  lineHeight = fontSize * 1.27;
 
   return { fontSize, lines, lineHeight };
 }
@@ -501,17 +524,17 @@ function drawLogo(context, source, x, y, height) {
   );
 }
 
-async function exportBanner({ capture = false } = {}) {
+async function exportBanner({ capture = false, captureScale = 1 } = {}) {
   const designWidth = getDesignWidth();
   const designHeight = getDesignHeight();
-  const exportScale = capture ? 1 : Number(elements.exportScale.value);
+  const exportScale = capture ? captureScale : Number(elements.exportScale.value);
   const exportFormat = elements.exportFormat.value;
   const isJpeg = exportFormat === "jpeg";
   const mimeType = isJpeg ? "image/jpeg" : "image/png";
   const extension = isJpeg ? "jpg" : "png";
   const canvas = document.createElement("canvas");
-  canvas.width = designWidth * exportScale;
-  canvas.height = designHeight * exportScale;
+  canvas.width = Math.ceil(designWidth * exportScale);
+  canvas.height = Math.ceil(designHeight * exportScale);
   const context = canvas.getContext("2d");
 
   elements.downloadButton.disabled = true;
@@ -545,18 +568,19 @@ async function exportBanner({ capture = false } = {}) {
       context.strokeRect(innerInset, innerInset, designWidth - innerInset * 2, designHeight - innerInset * 2);
     }
 
-    const logoHeight = state.layout === "arched" ? state.heritageLogoSize : state.layout === "top" ? state.logoSize * 2 : state.logoSize;
-    const logoY = state.layout === "arched" ? 120 : state.layout === "top" ? 55 : (designHeight - logoHeight) / 2;
-    const logoCenter = state.borderWidth + state.sideSpacing + 130;
+    const geometry = getBoardGeometry();
+    const logoHeight = geometry.logoHeight;
+    const logoY = (designHeight - logoHeight) / 2;
+    const logoCenter = geometry.logoCenter;
     drawLogo(context, logoSource, logoCenter, logoY, logoHeight);
     drawLogo(context, logoSource, designWidth - logoCenter, logoY, logoHeight);
 
-    const textLeft = state.borderWidth + state.sideSpacing + 260 + 16;
+    const textLeft = geometry.textLeft;
     const textRight = designWidth - textLeft;
     const maxTextWidth = textRight - textLeft;
     const text = cleanEditableText(elements.bannerText.innerText) || DEFAULT_TEXT;
-    const textTop = state.layout === "arched" ? 120 + logoHeight + state.heritageGap : state.layout === "top" ? logoHeight + 90 : 17;
-    const textBottom = designHeight - (["top", "arched"].includes(state.layout) ? 55 : 17);
+    const textTop = (designHeight - geometry.textHeight) / 2;
+    const textBottom = designHeight - textTop;
     const { fontSize, lines, lineHeight } = getFittedLines(context, text, maxTextWidth, textBottom - textTop);
     context.font = getCanvasFont(fontSize);
     context.fillStyle = state.textColor;
@@ -595,6 +619,14 @@ function updateDownloadButtonLabel() {
 }
 
 function bindEvents() {
+  for (const [key, minimum, maximum] of [["boardWidth", 400, 3000], ["boardHeight", 120, 1200]]) {
+    elements[`${key}Range`].addEventListener("input", () => updateState({ [key]: Number(elements[`${key}Range`].value) }));
+    elements[`${key}Input`].addEventListener("change", () => updateState({ [key]: clampNumber(elements[`${key}Input`].value, minimum, maximum, state[key]) }));
+  }
+  document.querySelector("#shortNameButton").addEventListener("click", () => {
+    if (!confirm("Replace the current banner text with Sarada Vihar? Saved choices will stay unchanged.")) return;
+    updateState({ text: "Sarada Vihar", boardWidth: 1200, boardHeight: 300, fontSize: 100 }, { updateText: true });
+  });
   elements.sideSpacingRange.addEventListener("input", () => updateState({ sideSpacing: Number(elements.sideSpacingRange.value) }));
   elements.matchEmblemColor.addEventListener("change", () => updateState({ matchEmblemColor: elements.matchEmblemColor.checked }));
   elements.layoutSelect.addEventListener("change", () => updateState({ layout: elements.layoutSelect.value }));
@@ -673,6 +705,7 @@ function designMetadata(savedState) {
     `Font: ${design.font} | Size: ${design.fontSize} px | ${design.bold ? "Bold" : "Regular"}${design.italic ? " Italic" : ""} | Alignment: ${design.align}`,
     `Border thickness: ${design.borderWidth} px | Logo size: ${design.logoSize} px`,
     `Left and right spacing: ${design.sideSpacing} px`,
+    `Board dimensions: ${design.boardWidth} × ${design.boardHeight} px`,
     `Emblem style: ${savedState.matchEmblemColor === true ? "Matches text colour" : "Original colours"}`,
   ];
 }
@@ -763,7 +796,10 @@ document.querySelector("#downloadWord").onclick = async () => {
       for (const layout of layouts) {
         galleryStatus.textContent = `Preparing ${images.length + 1} of ${favorites.length * layouts.length} images…`;
         state = { ...defaultState, ...favorite.state, matchEmblemColor: favorite.state.matchEmblemColor === true, layout: "classic" }; applyState({ updateText: true });
-        const canvas = await exportBanner({ capture: true });
+        // Match the Word picture's maximum 6.5 × 4.4 inch footprint at 600 DPI.
+        // Render text and borders at this resolution rather than enlarging a small PNG.
+        const wordScale = Math.max(1, Math.min(6.5 * 600 / getDesignWidth(), 4.4 * 600 / getDesignHeight()));
+        const canvas = await exportBanner({ capture: true, captureScale: wordScale });
         if (!canvas) throw new Error("Could not render a saved choice.");
         images.push({ choiceId: favorite.id, choiceName: favorite.name, layout: layout.value, layoutName: layout.name, name: `${favorite.name} — ${layout.name}`, metadata: designMetadata(state), data: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height });
       }
