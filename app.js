@@ -14,6 +14,9 @@ const DEFAULT_TEXT = [
 ].join("\n");
 
 const FONT_OPTIONS = {
+  Anton: "'Anton', Impact, sans-serif",
+  "Archivo Black": "'Archivo Black', 'Arial Black', sans-serif",
+  "League Spartan": "'League Spartan', Arial, sans-serif",
   Cinzel: "'Cinzel', Georgia, serif",
   "Libre Baskerville": "'Libre Baskerville', Georgia, serif",
   "Roboto Slab": "'Roboto Slab', Georgia, serif",
@@ -39,17 +42,22 @@ const defaultState = Object.freeze({
   bold: true,
   italic: false,
   align: "center",
-  textColor: "#9E1014",
-  backgroundColor: "#FFF8E7",
-  borderColor: "#171717",
+  textColor: "#FFFFD9",
+  backgroundColor: "#A50001",
+  borderColor: "#FFFFD9",
   borderWidth: 6,
   logoSize: 214,
+  sideSpacing: 40,
   heritageLogoSize: 300,
   heritageGap: 20,
   layout: "classic",
+  matchEmblemColor: true,
 });
 
 const elements = {
+  sideSpacingRange: document.querySelector("#sideSpacingRange"),
+  sideSpacingOutput: document.querySelector("#sideSpacingOutput"),
+  matchEmblemColor: document.querySelector("#matchEmblemColor"),
   layoutSelect: document.querySelector("#layoutSelect"),
   banner: document.querySelector("#banner"),
   bannerViewport: document.querySelector("#bannerViewport"),
@@ -87,6 +95,8 @@ let state = loadState();
 let saveTimer;
 let logoPromise;
 let transparentLogoSource;
+let monochromeMaskPromise;
+let previewVersion = 0;
 
 function loadState() {
   try {
@@ -98,6 +108,7 @@ function loadState() {
     next.font = FONT_OPTIONS[next.font] ? next.font : defaultState.font;
     next.fontSize = clampNumber(next.fontSize, 24, 64, defaultState.fontSize);
     next.logoSize = clampNumber(next.logoSize, 140, 255, defaultState.logoSize);
+    next.sideSpacing = clampNumber(next.sideSpacing, 0, 120, defaultState.sideSpacing);
     next.heritageLogoSize = clampNumber(next.heritageLogoSize, 240, 400, defaultState.heritageLogoSize);
     next.heritageGap = clampNumber(next.heritageGap, 0, 100, defaultState.heritageGap);
     next.borderWidth = clampNumber(next.borderWidth, 0, 14, defaultState.borderWidth);
@@ -107,7 +118,8 @@ function loadState() {
     next.align = ["left", "center", "right"].includes(next.align) ? next.align : defaultState.align;
     next.bold = Boolean(next.bold);
     next.italic = Boolean(next.italic);
-    next.layout = ["classic", "top", "left", "arched"].includes(next.layout) ? next.layout : "classic";
+    next.layout = "classic";
+    next.matchEmblemColor = typeof stored.matchEmblemColor === "boolean" ? stored.matchEmblemColor : false;
     delete next.led;
     return next;
   } catch {
@@ -133,6 +145,8 @@ function populateFonts() {
 }
 
 function applyState({ updateText = false } = {}) {
+  state.layout = "classic";
+  elements.matchEmblemColor.checked = Boolean(state.matchEmblemColor);
   elements.layoutSelect.value = state.layout;
   elements.banner.dataset.layout = state.layout;
   elements.banner.style.width = `${getDesignWidth()}px`;
@@ -149,6 +163,9 @@ function applyState({ updateText = false } = {}) {
   elements.banner.style.setProperty("--inner-border-width", `${state.borderWidth > 0 ? Math.max(1, state.borderWidth / 2) : 0}px`);
   elements.banner.classList.toggle("has-border", state.borderWidth > 0);
   elements.banner.style.setProperty("--logo-height", `${state.logoSize}px`);
+  elements.banner.style.setProperty("--side-spacing", `${state.sideSpacing}px`);
+  elements.sideSpacingRange.value = String(state.sideSpacing);
+  elements.sideSpacingOutput.textContent = `${state.sideSpacing} px`;
   elements.banner.style.setProperty("--heritage-logo-height", `${state.heritageLogoSize}px`);
   elements.banner.style.setProperty("--heritage-gap", `${state.heritageGap}px`);
   elements.heritageGapControl.hidden = state.layout !== "arched";
@@ -205,6 +222,7 @@ function applyState({ updateText = false } = {}) {
   elements.borderWidthOutput.textContent = `${state.borderWidth} px`;
 
   requestAnimationFrame(checkOverflow);
+  prepareLogoPreview().catch(() => {});
 }
 
 function syncColorControls(prefix, color) {
@@ -403,12 +421,46 @@ function getTransparentLogoSource(image) {
 }
 
 async function prepareLogoPreview() {
-  const logo = await loadLogo();
-  const source = getTransparentLogoSource(logo);
+  const version = ++previewVersion;
+  const source = await getActiveLogoSource();
+  if (version !== previewVersion) return;
   const transparentLogoUrl = source.toDataURL("image/png");
   for (const image of document.querySelectorAll(".banner-logo")) {
     image.src = transparentLogoUrl;
   }
+}
+
+async function getActiveLogoSource() {
+  const matchColor = Boolean(state.matchEmblemColor);
+  const color = state.textColor;
+  if (!matchColor) return getTransparentLogoSource(await loadLogo());
+  if (!monochromeMaskPromise) {
+    monochromeMaskPromise = new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onerror = () => reject(new Error("Could not load the matching-colour emblem."));
+      image.onload = () => {
+        const mask = document.createElement("canvas");
+        mask.width = image.naturalWidth; mask.height = image.naturalHeight;
+        const context = mask.getContext("2d", { willReadFrequently: true });
+        context.drawImage(image, 0, 0);
+        const data = context.getImageData(0, 0, mask.width, mask.height);
+        // The supplied cream artwork has a bright green channel; the red background does not.
+        // Use this as coverage, preserving the emblem details without redrawing the artwork.
+        for (let offset = 0; offset < data.data.length; offset += 4) {
+          const coverage = Math.max(0, Math.min(1, (data.data[offset + 1] - 35) / 190));
+          data.data[offset + 3] = Math.round(data.data[offset + 3] * coverage);
+          data.data[offset] = data.data[offset + 1] = data.data[offset + 2] = 255;
+        }
+        context.putImageData(data, 0, 0); resolve(mask);
+      };
+      image.src = "./assets/emblem-monochrome-source.png";
+    });
+  }
+  const mask = await monochromeMaskPromise;
+  const tinted = document.createElement("canvas"); tinted.width = mask.width; tinted.height = mask.height;
+  const context = tinted.getContext("2d"); context.drawImage(mask, 0, 0);
+  context.globalCompositeOperation = "source-in"; context.fillStyle = color; context.fillRect(0, 0, tinted.width, tinted.height);
+  return tinted;
 }
 
 function getCanvasFont(size) {
@@ -469,7 +521,7 @@ async function exportBanner({ capture = false } = {}) {
   try {
     await document.fonts.load(getCanvasFont(state.fontSize));
     await document.fonts.ready;
-    const logo = await loadLogo();
+    const logoSource = await getActiveLogoSource();
     context.scale(exportScale, exportScale);
     if (state.layout === "arched") {
       if (isJpeg) {
@@ -493,14 +545,14 @@ async function exportBanner({ capture = false } = {}) {
       context.strokeRect(innerInset, innerInset, designWidth - innerInset * 2, designHeight - innerInset * 2);
     }
 
-    const logoSource = getTransparentLogoSource(logo);
     const logoHeight = state.layout === "arched" ? state.heritageLogoSize : state.layout === "top" ? state.logoSize * 2 : state.logoSize;
     const logoY = state.layout === "arched" ? 120 : state.layout === "top" ? 55 : (designHeight - logoHeight) / 2;
-    drawLogo(context, logoSource, ["top", "arched"].includes(state.layout) ? designWidth / 2 : 150, logoY, logoHeight);
-    if (state.layout === "classic") drawLogo(context, logoSource, designWidth - 150, logoY, logoHeight);
+    const logoCenter = state.borderWidth + state.sideSpacing + 130;
+    drawLogo(context, logoSource, logoCenter, logoY, logoHeight);
+    drawLogo(context, logoSource, designWidth - logoCenter, logoY, logoHeight);
 
-    const textLeft = state.layout === "arched" ? 85 : state.layout === "top" ? 60 : 300;
-    const textRight = designWidth - (state.layout === "arched" ? 85 : state.layout === "classic" ? 300 : state.layout === "top" ? 60 : 100);
+    const textLeft = state.borderWidth + state.sideSpacing + 260 + 16;
+    const textRight = designWidth - textLeft;
     const maxTextWidth = textRight - textLeft;
     const text = cleanEditableText(elements.bannerText.innerText) || DEFAULT_TEXT;
     const textTop = state.layout === "arched" ? 120 + logoHeight + state.heritageGap : state.layout === "top" ? logoHeight + 90 : 17;
@@ -543,6 +595,8 @@ function updateDownloadButtonLabel() {
 }
 
 function bindEvents() {
+  elements.sideSpacingRange.addEventListener("input", () => updateState({ sideSpacing: Number(elements.sideSpacingRange.value) }));
+  elements.matchEmblemColor.addEventListener("change", () => updateState({ matchEmblemColor: elements.matchEmblemColor.checked }));
   elements.layoutSelect.addEventListener("change", () => updateState({ layout: elements.layoutSelect.value }));
   elements.bannerText.addEventListener("input", () => {
     state = { ...state, text: cleanEditableText(elements.bannerText.innerText) };
@@ -618,7 +672,8 @@ function designMetadata(savedState) {
     `Text colour: ${design.textColor} | Background: ${design.backgroundColor} | Border: ${design.borderColor}`,
     `Font: ${design.font} | Size: ${design.fontSize} px | ${design.bold ? "Bold" : "Regular"}${design.italic ? " Italic" : ""} | Alignment: ${design.align}`,
     `Border thickness: ${design.borderWidth} px | Logo size: ${design.logoSize} px`,
-    `Heritage emblem: ${design.heritageLogoSize} px | Emblem to text spacing: ${design.heritageGap} px`,
+    `Left and right spacing: ${design.sideSpacing} px`,
+    `Emblem style: ${savedState.matchEmblemColor === true ? "Matches text colour" : "Original colours"}`,
   ];
 }
 function renderFavorites() {
@@ -635,9 +690,9 @@ function renderFavorites() {
     const layoutPicker = document.createElement("select");
     layoutPicker.setAttribute("aria-label", `Layout to restore for ${favorite.name}`);
     for (const option of elements.layoutSelect.options) layoutPicker.append(option.cloneNode(true));
-    layoutPicker.value = favorite.state.layout || "classic";
-    const coverage = document.createElement("p"); coverage.textContent = "All 4 layouts saved · choose one to restore";
-    restore.onclick = () => { state = { ...defaultState, ...favorite.state, layout: layoutPicker.value }; applyState({ updateText: true }); queueSave(); };
+    layoutPicker.value = "classic"; layoutPicker.hidden = true;
+    const coverage = document.createElement("p"); coverage.textContent = "Classic rectangle";
+    restore.onclick = () => { state = { ...defaultState, ...favorite.state, matchEmblemColor: favorite.state.matchEmblemColor === true, layout: "classic" }; applyState({ updateText: true }); queueSave(); };
     const remove = document.createElement("button"); remove.className = "button button-quiet"; remove.textContent = "Delete";
     remove.onclick = () => {
       if (!confirm(`Delete saved choice “${favorite.name}”?`)) return;
@@ -649,20 +704,44 @@ function renderFavorites() {
   }
   document.querySelector("#downloadWord").disabled = favorites.length === 0;
 }
-document.querySelector("#saveDesign").onclick = async () => {
-  const button = document.querySelector("#saveDesign"); button.disabled = true;
+const saveEmblemDialog = document.querySelector("#saveEmblemDialog");
+const saveEmblemForm = document.querySelector("#saveEmblemForm");
+let savingEmblem = false;
+document.querySelector("#saveDesign").onclick = () => {
+  saveEmblemForm.elements.savedEmblemStyle.value = state.matchEmblemColor ? "matching" : "original";
+  document.querySelector("#saveEmblemStatus").textContent = "";
+  saveEmblemDialog.showModal();
+};
+document.querySelector("#cancelEmblemSave").onclick = () => saveEmblemDialog.close();
+saveEmblemDialog.addEventListener("cancel", event => { if (savingEmblem) event.preventDefault(); });
+saveEmblemForm.onsubmit = async (event) => {
+  event.preventDefault();
+  if (savingEmblem) return;
+  savingEmblem = true;
+  const original = { ...state, text: cleanEditableText(elements.bannerText.innerText) || DEFAULT_TEXT };
+  const mode = saveEmblemForm.elements.savedEmblemStyle.value;
+  const controls = [...saveEmblemForm.querySelectorAll("button, input")];
+  controls.forEach(control => { control.disabled = true; });
   try {
-    const snapshot = { ...state, text: cleanEditableText(elements.bannerText.innerText) || DEFAULT_TEXT };
+    const name = document.querySelector("#designName").value.trim() || `Choice ${favorites.length + 1}`;
+    const additions = [];
+    for (const matching of (mode === "both" ? [false, true] : [mode === "matching"])) {
+    const snapshot = { ...original, matchEmblemColor: matching };
+    state = snapshot; applyState();
     const canvas = await exportBanner({ capture: true });
     if (!canvas) throw new Error("Could not capture the design.");
     const thumbnail = document.createElement("canvas"); thumbnail.width = 480; thumbnail.height = Math.round(480 * canvas.height / canvas.width);
     thumbnail.getContext("2d").drawImage(canvas, 0, 0, thumbnail.width, thumbnail.height);
-    const name = document.querySelector("#designName").value.trim() || `Choice ${favorites.length + 1}`;
-    const next = [...favorites, { id: crypto.randomUUID(), name, state: snapshot, layouts: [...elements.layoutSelect.options].map(option => option.value), image: thumbnail.toDataURL("image/png") }];
+    const savedName = mode === "both" ? `${name} (${matching ? "Text-colour emblem" : "Original emblem"})` : name;
+    additions.push({ id: crypto.randomUUID(), name: savedName, state: snapshot, layouts: ["classic"], image: thumbnail.toDataURL("image/png") });
+    }
+    const next = [...favorites, ...additions];
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(next)); favorites = next; renderFavorites();
-    galleryStatus.textContent = `Saved “${name}” for all four layouts.`; document.querySelector("#designName").value = "";
-  } catch (error) { galleryStatus.textContent = `Could not save: ${error.message} Your existing choices are preserved.`; }
-  finally { button.disabled = false; }
+    galleryStatus.textContent = mode === "both" ? `Saved both emblem styles for “${name}”.` : `Saved “${name}”.`;
+    document.querySelector("#designName").value = "";
+    saveEmblemDialog.close();
+  } catch (error) { document.querySelector("#saveEmblemStatus").textContent = `Could not save: ${error.message} Your existing choices are preserved.`; }
+  finally { state = original; applyState(); savingEmblem = false; controls.forEach(control => { control.disabled = false; }); }
 };
 document.querySelector("#downloadWord").onclick = async () => {
   const button = document.querySelector("#downloadWord"); button.disabled = true;
@@ -683,7 +762,7 @@ document.querySelector("#downloadWord").onclick = async () => {
     for (const favorite of exportChoices) {
       for (const layout of layouts) {
         galleryStatus.textContent = `Preparing ${images.length + 1} of ${favorites.length * layouts.length} images…`;
-        state = { ...defaultState, ...favorite.state, layout: layout.value }; applyState({ updateText: true });
+        state = { ...defaultState, ...favorite.state, matchEmblemColor: favorite.state.matchEmblemColor === true, layout: "classic" }; applyState({ updateText: true });
         const canvas = await exportBanner({ capture: true });
         if (!canvas) throw new Error("Could not render a saved choice.");
         images.push({ choiceId: favorite.id, choiceName: favorite.name, layout: layout.value, layoutName: layout.name, name: `${favorite.name} — ${layout.name}`, metadata: designMetadata(state), data: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height });
